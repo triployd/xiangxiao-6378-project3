@@ -1,0 +1,17 @@
+# number of nodes
+# number of messages to send
+# tobSend() delay
+
+10 		 30  	 2000 	   # 3 parameters
+
+0   	dc20   4673    	# nodeID hostName listenPort
+1   dc21   5683
+		2     dc22 		8907  # random random
+3     dc23     4612			# lulu shi shabi
+  4 	dc24    	6784		#hahahahah
+5     dc25   5434		# hell yeah
+6 dc26 5784			# solitaire
+7 dc27      8574	# bonjour
+8 dc28 4643			#guten tug
+9 dc29   5643        #sayonara
+
