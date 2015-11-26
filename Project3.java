@@ -35,11 +35,12 @@ public class Project3{
 		initiateOutputFile();
 		enableServer();
 		System.out.println("Node "+ nodeID + " System time: " + System.currentTimeMillis());
+		sleep(5000);
 
-		//Thread mutex = new Thread(new MutexWorker(nodeID, configFile, serverSock));
-		//mutex.start();
-		//MutexWorker mutex = new MutexWorker(nodeID, configFile, serverSock); // this is called in tob worker
 		TobWorker tob = new TobWorker(nodeID, configFile, serverSock);
+
+		Random random = new Random();
+		tob.tobSend("BROADCAST "+Integer.toString(random.nextInt(10000)));
 		
 		System.out.println("end of main()");
 	}
@@ -162,11 +163,25 @@ class TobWorker implements Runnable, TobInterface{
 		System.out.println("Node " + idTob + " initiating tob service");
 		readConfigTob();
 		connectAllNodes();
-		MutexWorker mutex = new MutexWorker(idTob, configFileTob, tobServerSocket); // this is called in tob worker
+		MutexWorker mutex = new MutexWorker(idTob, configFileTob, tobServerSocket); 
 		Thread listen = new Thread(new listenThread());
 		listen.start();
 
+	}
 
+	public void broadcast(String message){
+		for(int i=0; i<numNodes; i++){
+			int target = Integer.parseInt(nodeNames.get(i));
+			String host = hostNames.get(target) + ".utdallas.edu";
+			int port = Integer.parseInt(portNums.get(target));
+			try{
+				PrintWriter writer = new PrintWriter(tobOutSockets[target].getOutputStream(), true);
+				writer.println(message);
+			}catch(IOException ex){
+				System.out.println("Error in tob.broadcast(), unable to send the message, Node "+idTob);
+				ex.printStackTrace();
+			}
+		}
 	}
 
 	class listenThread implements Runnable{
@@ -291,6 +306,8 @@ class TobWorker implements Runnable, TobInterface{
 		//mutex.csEnter();
 		//broadcast the message
 		//mutex.csExit();
+		
+		broadcast(message);
 
 	}
 	public void tobReceive(){
