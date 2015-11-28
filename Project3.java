@@ -14,6 +14,10 @@ public class Project3{
 	public static int numNodes; //record the number of nodes in the system
 	public static int numMessages;
 	public static int tobSendDelay;
+	public static volatile int numSent = 0;
+	public static volatile int receivedNum = 0;
+	public static long lastTimeSent = 0;
+	public static long currentTime = 0;
 	public static ArrayList<String> nodeNames = new ArrayList<String>();
 	public static ArrayList<String> hostNames = new ArrayList<String>();
 	public static ArrayList<String> portNums = new ArrayList<String>();
@@ -38,11 +42,54 @@ public class Project3{
 		sleep(5000);
 
 		TobWorker tob = new TobWorker(nodeID, configFile, serverSock);
-
-		Random random = new Random();
-		tob.tobSend("BROADCAST "+Integer.toString(random.nextInt(10000)));
+		
+		Thread send = new Thread(new sendThread(tob));
+		send.start();
+		Thread receive = new Thread(new receiveThread(tob));
+		receive.start();
 		
 		System.out.println("end of main()");
+	}
+
+	static class sendThread implements Runnable{
+		TobWorker tob;
+		sendThread(TobWorker tob1){
+			this.tob = tob1;
+		}
+		public void run(){
+			while(true){
+				Random random = new Random();
+				while(numSent < numMessages){
+					currentTime = System.currentTimeMillis();
+					if(currentTime - lastTimeSent >= tobSendDelay){
+						tob.tobSend("BROADCAST "+Integer.toString(random.nextInt(10000)));
+						numSent++;
+						lastTimeSent = currentTime;
+					}
+					sleep(100);
+				}
+			}
+		}
+	}
+
+	static class receiveThread implements Runnable{
+		TobWorker tob;
+		public volatile boolean running = true;
+		receiveThread(TobWorker tob1){
+			this.tob = tob1;
+		}
+		public void run(){
+			while(running){
+				String receivedMsg = tob.tobReceive();
+				writerOutputFile.println(receivedMsg);
+				receivedNum++;
+				if(receivedNum >= numMessages){
+					writerOutputFile.close();
+					running = false;
+				}
+				sleep(100);
+			}
+		}
 	}
 
 	static void initiateOutputFile(){
@@ -132,7 +179,7 @@ public class Project3{
 
 interface TobInterface{
 	public void tobSend(String message);
-	public void tobReceive();
+	public String tobReceive();
 }
 interface MutexInterface{
 	public void csEnter();
@@ -155,6 +202,8 @@ class TobWorker implements Runnable, TobInterface{
 	public static ArrayList<String> hostNames = new ArrayList<String>();
 	public static ArrayList<String> portNums = new ArrayList<String>();
 
+	public volatile Queue<String> receivedQueue = new LinkedList<String>(); //may be make this queue volatile
+	public volatile Queue<String> sendQueue = new LinkedList<String>();
 	//Constructor
 	TobWorker(String id, String config, ServerSocket server){
 		idTob = id;
@@ -163,7 +212,7 @@ class TobWorker implements Runnable, TobInterface{
 		System.out.println("Node " + idTob + " initiating tob service");
 		readConfigTob();
 		connectAllNodes();
-		MutexWorker mutex = new MutexWorker(idTob, configFileTob, tobServerSocket); 
+		MutexWorker mutex = new MutexWorker(idTob, configFileTob);
 		Thread listen = new Thread(new listenThread());
 		listen.start();
 
@@ -239,7 +288,12 @@ class TobWorker implements Runnable, TobInterface{
 				try{
 					line = in.readLine();
 					if(line != null){
-						System.out.println("Node "+idTob+" message received in tob service listen socket: " + line);	
+						System.out.println("Node "+idTob+" message received in tob service listen socket: " + line);
+						if(line.contains("BROADCAST")){
+							String[] parts = line.trim().split("\\s+");
+							String randomReceived = parts[1];
+							receivedQueue.add(randomReceived);
+						}
 					}
 				}catch(IOException e){
 					System.out.println("Read failed from ClientWorker-->run()--> while(scanning)-->try{}");
@@ -310,8 +364,15 @@ class TobWorker implements Runnable, TobInterface{
 		broadcast(message);
 
 	}
-	public void tobReceive(){
-
+	public String tobReceive(){
+		while(true){
+			if(!receivedQueue.isEmpty()){
+				//pass the number to app level
+				return receivedQueue.remove();
+			}else{
+				sleep(100);
+			}
+		}
 	}
 
 	public static void sleep(int milliseconds){
@@ -375,16 +436,35 @@ class MutexWorker implements Runnable, MutexInterface{
 	public static Socket[] mutexOutSockets;
 	public static ServerSocket mutexServerSocket;
 	//Constructor
-	MutexWorker(String id, String config, ServerSocket server){
+	MutexWorker(String id, String config){
 		idMutex = id;
 		configFileMutex = config;
-		mutexServerSocket = server;
+		//mutexServerSocket = server;
 		System.out.println("Node " + idMutex + " initiating mutex service");
 		readConfigMutex();
+		enableServerMutex();
 		connectAllNodes();
 		Thread listen = new Thread(new listenThread());
 		listen.start();
 		
+	}
+
+	public static void enableServerMutex(){
+		int port = 0;
+		try{
+			for(int i=0; i<nodeNames.size(); i++){
+				if(Integer.valueOf(idMutex) == Integer.valueOf(nodeNames.get(i))){
+					port = Integer.parseInt(portNums.get(i));
+				}else{
+					continue;
+				}
+			}
+			mutexServerSocket = new ServerSocket(port);
+			System.out.println("Node " + idMutex + " listening on port " + port+" in mutex");
+		}catch (IOException e){
+			System.out.println("Could not listen on port in mutex: " + port);
+			System.exit(-1);
+		}
 	}
 
 	class listenThread implements Runnable{
@@ -460,11 +540,17 @@ class MutexWorker implements Runnable, MutexInterface{
 	public void csEnter(){
 		//this is how a node initiates a cs request
 		//returns when it has the permission to enter cs
+		//TODO: 1. send request to other nodes
+		//TODO: 2. while(true) return
+		while(true){
+
+		}
 	}
 
 	public void csExit(){
 		//this is how a node inform the service that it has finished broadcasting and exit cs
-
+		//TODO: 1. send release to other nodes
+		
 	}
 
 	public static void sleep(int milliseconds){
@@ -510,9 +596,9 @@ class MutexWorker implements Runnable, MutexInterface{
 					String[] parts2 = currentLine.split("\\s+");
 					nodeNames.add(parts2[0]);
 					hostNames.add(parts2[1]);
-					portNums.add(parts2[2]);
-					//System.out.println("Section 2: ");
-					//System.out.println("Node: " + parts2[0] + " host: " + parts2[1] + " port: " + parts2[2]);
+					portNums.add(Integer.toString(Integer.parseInt(parts2[2])+1));
+					System.out.println("Mutex Section 2: ");
+					System.out.println("Node: " + parts2[0] + " host: " + parts2[1] + " port: " + parts2[2]);
 					//System.out.println("lineCount: " + lineCount);
 					continue;
 				}
