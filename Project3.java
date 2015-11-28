@@ -204,6 +204,7 @@ class TobWorker implements Runnable, TobInterface{
 
 	public volatile Queue<String> receivedQueue = new LinkedList<String>(); //may be make this queue volatile
 	public volatile Queue<String> sendQueue = new LinkedList<String>();
+	public MutexWorker mutex;
 	//Constructor
 	TobWorker(String id, String config, ServerSocket server){
 		idTob = id;
@@ -212,7 +213,7 @@ class TobWorker implements Runnable, TobInterface{
 		System.out.println("Node " + idTob + " initiating tob service");
 		readConfigTob();
 		connectAllNodes();
-		MutexWorker mutex = new MutexWorker(idTob, configFileTob);
+		mutex = new MutexWorker(idTob, configFileTob);
 		Thread listen = new Thread(new listenThread());
 		listen.start();
 
@@ -357,11 +358,10 @@ class TobWorker implements Runnable, TobInterface{
 
 	}
 	public void tobSend(String message){
-		//mutex.csEnter();
-		//broadcast the message
-		//mutex.csExit();
-		
+
+		mutex.csEnter();
 		broadcast(message);
+		mutex.csExit();
 
 	}
 	public String tobReceive(){
@@ -532,6 +532,21 @@ class MutexWorker implements Runnable, MutexInterface{
 			}	
 		}
 	}
+
+	public void broadcast(String message){
+		for(int i=0; i<numNodes; i++){
+			int target = Integer.parseInt(nodeNames.get(i));
+			String host = hostNames.get(target) + ".utdallas.edu";
+			int port = Integer.parseInt(portNums.get(target));
+			try{
+				PrintWriter writer = new PrintWriter(mutexOutSockets[target].getOutputStream(), true);
+				writer.println(message);
+			}catch(IOException ex){
+				System.out.println("Error in mutex.broadcast(), unable to send the message, Node "+idMutex);
+				ex.printStackTrace();
+			}
+		}
+	}
 	
 	public void run(){
 		System.out.println("Hello this is class: MutexWorker.run(), Node: " + idMutex);
@@ -542,15 +557,18 @@ class MutexWorker implements Runnable, MutexInterface{
 		//returns when it has the permission to enter cs
 		//TODO: 1. send request to other nodes
 		//TODO: 2. while(true) return
-		while(true){
+		String timeStamp = Long.toString(System.currentTimeMillis());
+		String msgSend = "REQUEST " + idMutex + " " + timeStamp;
+		broadcast(msgSend);
+		/*while(true){
 
-		}
+		}*/
 	}
 
 	public void csExit(){
 		//this is how a node inform the service that it has finished broadcasting and exit cs
 		//TODO: 1. send release to other nodes
-		
+		broadcast("RELEASE " + idMutex);
 	}
 
 	public static void sleep(int milliseconds){
