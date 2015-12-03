@@ -38,60 +38,17 @@ public class Project3{
 		nodeID = args[0];
 		configFile = args[1];
 		readConfig();
-		initiateOutputFile();
+		
 		enableServer();
 		System.out.println("Node "+ nodeID + " System time: " + System.currentTimeMillis());
 		sleep(5000);
 
-		TobWorker tob = new TobWorker(nodeID, configFile, serverSock);
 		
-		Thread send = new Thread(new SendThread(tob));
-		send.start();
-		Thread receive = new Thread(new ReceiveThread(tob));
-		receive.start();
+		//TobWorker tob = new TobWorker(nodeID, configFile, serverSock);
+
+		Listen listen = new Listen (nodeID, configFile, serverSock);
 		
 		System.out.println("end of main()");
-	}
-
-	static class SendThread implements Runnable{
-		TobWorker tob;
-		SendThread(TobWorker tob1){
-			this.tob = tob1;
-		}
-		public void run(){
-			while(true){
-				Random random = new Random();
-				while(numSent < numMessages){
-					currentTime = System.currentTimeMillis();
-					if(currentTime - lastTimeSent >= tobSendDelay){
-						tob.tobSend("BROADCAST "+Integer.toString(random.nextInt(10000)));
-						numSent++;
-						lastTimeSent = currentTime;
-					}
-					sleep(100);
-				}
-			}
-		}
-	}
-
-	static class ReceiveThread implements Runnable{
-		TobWorker tob;
-		public volatile boolean running = true;
-		ReceiveThread(TobWorker tob1){
-			this.tob = tob1;
-		}
-		public void run(){
-			while(running){
-				String receivedMsg = tob.tobReceive();
-				writerOutputFile.println(receivedMsg);
-				receivedNum++;
-				if(receivedNum >= numMessages){
-					writerOutputFile.close();
-					running = false;
-				}
-				sleep(100);
-			}
-		}
 	}
 
 	static void initiateOutputFile(){
@@ -188,52 +145,96 @@ interface MutexInterface{
 	public void csExit(String tag);
 }
 
-class TobWorker implements TobInterface{
-	//suport tobSend(), tobReceive()
-	//field of class TobWorker
-	public static String configFileTob;
-	public static String idTob;
-	public static ServerSocket tobServerSocket;
-	public static Socket[] tobOutSockets;
+class Listen{
+
+	public static String configFileListen;
+	public static String idListen;
+	public static ServerSocket listenServerSocket;
+	public static Socket[] listenOutSockets;
 
 	public static int lineCount;
 	public static int numNodes; //record the number of nodes in the system
 	public static int numMessages;
-	public static int tobSendDelay;
+	public static int listenSendDelay;
+	public static volatile int numSent = 0;
+	public static volatile int receivedNum = 0;
+	public static long lastTimeSent = 0;
+	public static long currentTime = 0;
+	public static PrintWriter writerOutputFile;
 	public static ArrayList<String> nodeNames = new ArrayList<String>();
 	public static ArrayList<String> hostNames = new ArrayList<String>();
 	public static ArrayList<String> portNums = new ArrayList<String>();
 
-	public volatile Queue<String> receivedQueue = new LinkedList<String>(); //may be make this queue volatile
-	public volatile Queue<String> sendQueue = new LinkedList<String>();
-	public MutexWorker mutex;
-	//Constructor
-	TobWorker(String id, String config, ServerSocket server){
-		idTob = id;
-		configFileTob = config;
-		tobServerSocket = server;
-		System.out.println("Node " + idTob + " initiating tob service");
-		readConfigTob();
+	public static TobWorker tob;
+	public static MutexWorker mutex;
+
+	Listen(String id, String config, ServerSocket server){
+		idListen = id;
+		configFileListen = config;
+		listenServerSocket = server;
+		readConfigListen();
 		connectAllNodes();
-		mutex = new MutexWorker(idTob, configFileTob);
+		initiateOutputFile();
 		Thread listen = new Thread(new ListenThread());
 		listen.start();
-		Thread send = new Thread(new SendThreadTob());
+
+		mutex = new MutexWorker(idListen, configFileListen);
+		tob = new TobWorker(idListen, configFileListen, mutex);
+
+		Thread send = new Thread(new SendThread(tob));
 		send.start();
+		Thread receive = new Thread(new ReceiveThread(tob));
+		receive.start();
 
 	}
 
-	public void broadcast(String message){
-		for(int i=0; i<numNodes; i++){
-			int target = Integer.parseInt(nodeNames.get(i));
-			String host = hostNames.get(target) + ".utdallas.edu";
-			int port = Integer.parseInt(portNums.get(target));
-			try{
-				PrintWriter writer = new PrintWriter(tobOutSockets[target].getOutputStream(), true);
-				writer.println(message);
-			}catch(IOException ex){
-				System.out.println("Error in tob.broadcast(), unable to send the message, Node "+idTob);
-				ex.printStackTrace();
+	static void initiateOutputFile(){
+		try{
+			writerOutputFile = new PrintWriter(configFileListen.replace(".txt", "") + "-" + idListen +".out");
+		}catch(IOException e){
+			e.printStackTrace();
+		}
+	}
+
+	class SendThread implements Runnable{
+		TobWorker tob;
+		SendThread(TobWorker tob1){
+			this.tob = tob1;
+		}
+		public void run(){
+			while(true){
+				Random random = new Random();
+				while(numSent < numMessages){
+					currentTime = System.currentTimeMillis();
+					if(currentTime - lastTimeSent >= listenSendDelay){
+						tob.tobSend("BROADCAST "+Integer.toString(random.nextInt(10000)));
+						numSent++;
+						lastTimeSent = currentTime;
+					}
+					sleep(100);
+				}
+			}
+		}
+	}
+
+	class ReceiveThread implements Runnable{
+		TobWorker tob;
+		public volatile boolean running = true;
+		ReceiveThread(TobWorker tob1){
+			this.tob = tob1;
+		}
+		public void run(){
+			while(running){
+				String receivedMsg = tob.tobReceive();
+				writerOutputFile.println(receivedMsg);
+				receivedNum++;
+				System.out.println("receivedNum, numMessages: " + receivedNum + ", " + numMessages);
+				if(receivedNum >= numMessages){
+					System.out.println("Mark before writerOutputFile.close()");
+					writerOutputFile.close();
+					running = false;
+				}
+				sleep(100);
 			}
 		}
 	}
@@ -251,16 +252,16 @@ class TobWorker implements TobInterface{
 		while(scanning){
 			ClientWorker w;
 			try{
-				w = new ClientWorker(tobServerSocket.accept());
+				w = new ClientWorker(listenServerSocket.accept());
 				Thread t = new Thread(w);
 				t.start();
 			}catch(IOException e){
-				System.out.println("Accept failed in listenSocket() in MutexWorker class, node "+idTob+" terminated");
+				System.out.println("Accept failed in listenSocket() in Listen class, node "+idListen+" terminated");
 				try {
-					tobServerSocket.close();
+					listenServerSocket.close();
 					Thread.currentThread().interrupt();
 					}catch(IOException ex){
-						System.out.println("This node has already terminated, nodeID: " + idTob);
+						System.out.println("This node has already terminated, nodeID: " + idListen);
 					}
 				System.exit(-1);
 			}
@@ -281,7 +282,7 @@ class TobWorker implements TobInterface{
 			BufferedReader in = null;
 			PrintWriter out = null;
 			//boolean scanning = true;
-			int intNodeID = Integer.parseInt(idTob);
+			int intNodeID = Integer.parseInt(idListen);
 			try{
 				in = new BufferedReader(new InputStreamReader(client.getInputStream()));
 				out = new PrintWriter(client.getOutputStream(), true);
@@ -293,11 +294,15 @@ class TobWorker implements TobInterface{
 				try{
 					line = in.readLine();
 					if(line != null){
-						System.out.println("Node "+idTob+" message received in tob service listen socket: " + line);
+						System.out.println("Node "+idListen+" message received in Listen ClientWorker: " + line);
 						if(line.contains("BROADCAST")){
-							String[] parts = line.trim().split("\\s+");
-							String randomReceived = parts[1];
-							receivedQueue.add(randomReceived);
+							tob.receiveFromListen(line);
+						}else if(line.contains("REQUEST")){
+							mutex.receiveFromListen(line);
+						}else if(line.contains("REPLY")){
+							mutex.receiveFromListen(line);
+						}else if(line.contains("RELEASE")){
+							mutex.receiveFromListen(line);
 						}
 					}
 				}catch(IOException e){
@@ -305,7 +310,171 @@ class TobWorker implements TobInterface{
 					scanning = false;
 					//System.exit(-1);
 				}
-			}	
+			}
+		}
+	}
+
+	public static void sleep(int milliseconds){
+		try {
+			Thread.sleep(milliseconds);
+		}catch(InterruptedException ex){
+			Thread.currentThread().interrupt();
+		}
+	}
+
+	public static void readConfigListen(){
+		lineCount = 0;
+		System.out.println("Node "+ idListen + ": Starting to read config file in listen service!");
+		try(BufferedReader br = new BufferedReader(new FileReader(configFileListen))){
+			String currentLine;
+			while ((currentLine = br.readLine()) != null){
+				if(currentLine.trim().length() == 0) continue;
+				if(currentLine.trim().charAt(0) == '#') continue;
+				if(currentLine.trim().charAt(0) != '#' && currentLine.trim().contains("#")){
+					currentLine = currentLine.substring(0, currentLine.indexOf('#')); 
+				}
+				lineCount++;
+				currentLine = currentLine.trim().replaceAll("\\s+", " ");
+				//Section 1 : 3 parameters
+				if(lineCount == 1 && !currentLine.contains("dc")){
+					//System.out.println("Section 1: ");
+					//System.out.println("Reading 3 parameters for node " + nodeID);
+					String[] parts1 = currentLine.split("\\s+");
+					if(parts1.length != 3){
+						System.out.println("Error config information in line 1 for node " + idListen);
+						return;
+					}else{
+						numNodes = Integer.parseInt(parts1[0]);
+						numMessages = Integer.parseInt(parts1[1]);
+						listenSendDelay = Integer.parseInt(parts1[2]);
+						//System.out.println("3 parameters for node " + nodeID + " : ");
+						//System.out.println(numNodes+" "+numMessages+" "+tobSendDelay);
+						continue;
+					}
+				}
+				//Section 2: listen ports
+				if(lineCount > 1 && lineCount <= numNodes + 1 && currentLine.contains("dc")){
+					String[] parts2 = currentLine.split("\\s+");
+					nodeNames.add(parts2[0]);
+					hostNames.add(parts2[1]);
+					portNums.add(parts2[2]);
+					//System.out.println("Section 2: ");
+					//System.out.println("Node: " + parts2[0] + " host: " + parts2[1] + " port: " + parts2[2]);
+					//System.out.println("lineCount: " + lineCount);
+					continue;
+				}
+				System.out.println("Bad config file with excessive paths or other incorrect information");
+			}
+		}catch(IOException e){
+			System.out.println("readConfigListen() exceptions ");
+			e.printStackTrace();
+		}
+	}
+
+	public static void connectAllNodes(){
+		listenOutSockets = new Socket[numNodes];
+		int intID = Integer.parseInt(idListen);
+		for(int i=0; i<numNodes; i++){
+			int target = Integer.parseInt(nodeNames.get(i));
+			String host = hostNames.get(target)+ ".utdallas.edu";
+			int port = Integer.parseInt(portNums.get(target));
+			tryConnect(host, port, target);
+		}
+		return;
+	}
+
+	public static void tryConnect(String host, int port, int target){
+		boolean scanning = true;
+		int times = 0;
+		while(scanning){
+			try{
+				System.out.println("host and port and target: ");
+				System.out.println(host + " " + port + " " + target);
+				listenOutSockets[target] = new Socket(host, port);
+				scanning = false;
+				PrintWriter writer = new PrintWriter(listenOutSockets[target].getOutputStream(), true); 	//boolean autoflush or not?
+				writer.println("Hello, I am node "+ idListen + " connecting in listen service");
+				//writer.close();
+			}catch(IOException ex){
+				if(times > 1000){
+					System.out.println("Connection failed, need to fix some bugs, giving up reconnecting");
+					scanning = false;
+				}
+				System.out.println("Connection failed in Listen, reconnecting in 0.5 seconds");
+				ex.printStackTrace();
+				times++;
+				sleep(500);
+			}
+		}
+	}
+
+
+}
+
+class TobWorker implements TobInterface{
+	//suport tobSend(), tobReceive()
+	//field of class TobWorker
+	public static String configFileTob;
+	public static String idTob;
+	public static ServerSocket tobServerSocket;
+	public static Socket[] tobOutSockets;
+
+	public static int lineCount;
+	public static int numNodes; //record the number of nodes in the system
+	public static int numMessages;
+	public static int tobSendDelay;
+	public static ArrayList<String> nodeNames = new ArrayList<String>();
+	public static ArrayList<String> hostNames = new ArrayList<String>();
+	public static ArrayList<String> portNums = new ArrayList<String>();
+
+	public static Lock lockReceive = new ReentrantLock();
+	public static Lock lockSend = new ReentrantLock();
+
+	public volatile Queue<String> receivedQueue = new LinkedList<String>(); //may be make this queue volatile
+	public volatile Queue<String> sendQueue = new LinkedList<String>();
+	public MutexWorker mutex;
+	//Constructor
+	TobWorker(String id, String config, MutexWorker mut){
+		idTob = id;
+		configFileTob = config;
+		//tobServerSocket = server;
+		mutex = mut;
+		System.out.println("Node " + idTob + " initiating tob service");
+		readConfigTob();
+		connectAllNodes();
+		
+		//Thread listen = new Thread(new ListenThread());
+		//listen.start();
+		Thread send = new Thread(new SendThreadTob());
+		send.start();
+
+	}
+
+	public void receiveFromListen(String message){
+		if(message.contains("BROADCAST")){
+			String[] parts = message.trim().split("\\s+");
+			String randomReceived = parts[1];
+			lockReceive.lock();
+			try{
+				receivedQueue.add(randomReceived);
+			}finally{
+				lockReceive.unlock();
+			}
+		}
+	}
+
+	public void broadcast(String message){
+		for(int i=0; i<numNodes; i++){
+			int target = Integer.parseInt(nodeNames.get(i));
+			String host = hostNames.get(target) + ".utdallas.edu";
+			int port = Integer.parseInt(portNums.get(target));
+			try{
+				PrintWriter writer = new PrintWriter(tobOutSockets[target].getOutputStream(), true);
+				writer.println(message);
+			}catch(IOException ex){
+				System.out.println("Error in tob.broadcast(), unable to send the message, Node "+idTob);
+				ex.printStackTrace();
+			}
 		}
 	}
 
@@ -360,8 +529,12 @@ class TobWorker implements TobInterface{
 
 	public void tobSend(String message){
 		//just put the message into sendQueue is ok...
-		sendQueue.add(message);
-	
+		lockSend.lock();
+		try{
+			sendQueue.add(message);
+		}finally{
+			lockSend.unlock();
+		}
 	}
 
 	class SendThreadTob implements Runnable{
@@ -373,6 +546,7 @@ class TobWorker implements TobInterface{
 					String tag = idTob + " " + Long.toString(System.currentTimeMillis());
 					mutex.csEnter(tag);
 					broadcast(message);
+					System.out.println("Mark before mutex.csExit() in SendThreadTob");
 					mutex.csExit(tag);
 				}
 				sleep(100);
@@ -428,7 +602,7 @@ class TobWorker implements TobInterface{
 					System.out.println("Connection failed, need to fix some bugs, giving up reconnecting");
 					scanning = false;
 				}
-				System.out.println("Connection failed, reconnecting in 0.5 seconds");
+				System.out.println("Connection failed in TOB, reconnecting in 0.5 seconds");
 				//ex.printStackTrace();
 				times++;
 				sleep(500);
@@ -456,156 +630,74 @@ class MutexWorker implements MutexInterface{
 	public static Lock lockMap = new ReentrantLock();
 	public static volatile HashMap<String, Integer> mapReply = new HashMap<String, Integer>();
 	//Constructor
-	MutexWorker(String id, String config){
+	MutexWorker(String id, String config ){
 		idMutex = id;
 		configFileMutex = config;
 		//mutexServerSocket = server;
 		System.out.println("Node " + idMutex + " initiating mutex service");
-		//TimeStampComparator cmp = new TimeStampComparator();
 		pQueue = new PriorityQueue<String>(1000, new TimeStampComparator());
 		readConfigMutex();
-		enableServerMutex();
+		//enableServerMutex();
 		connectAllNodes();
-		Thread listen = new Thread(new listenThread());
-		listen.start();
+		//Thread listen = new Thread(new listenThread());
+		//listen.start();
 		
+	}
+
+	public void receiveFromListen(String message){
+		if(message.contains("REQUEST")){
+			String s = message.substring(message.indexOf(" ")+1);
+			System.out.println("REQUEST node and timeStamp :" + s);
+			lockQueue.lock();
+			try{
+				pQueue.add(s);
+				sendReply(s);
+			}finally{
+				lockQueue.unlock();
+			}
+		}else if(message.contains("REPLY")){
+			//TODO: 1. extract the tag,
+			//2. check if the tag has been received num%numNodes == 0 times
+			String tag = message.substring(message.indexOf(" ")+1);
+			System.out.println("REPLY node and timeStamp :" + tag);
+
+			lockMap.lock();
+			try{
+				if(mapReply.containsKey(tag)){
+					mapReply.put(tag, mapReply.get(tag)+1);
+				}else{
+					mapReply.put(tag, 1);
+				}
+			}finally{
+				lockMap.unlock();
+			}
+
+		}else if(message.contains("RELEASE")){
+			//TODO : remove pQueue's head, if the head contains the tag
+			//question : what if the head does not contain the tag?
+			if(!message.contains(pQueue.peek())){
+				System.out.println("release is not on the head of the queue");
+			}
+			String remove = pQueue.poll();
+			System.out.println("Node " + idMutex + " remove PriorityQueue entry "+ remove);
+		}
 	}
 
 	class TimeStampComparator implements Comparator<String>{
 		@Override
 		public int compare(String x, String y){
-			Random random = new Random();
 			String node1 = x.substring(0, x.indexOf(" "));
 			String node2 = y.substring(0, y.indexOf(" "));
 			String t1 = x.substring(x.indexOf(" ")+1);
 			String t2 = y.substring(y.indexOf(" ")+1);
 			if(Long.parseLong(t1) == Long.parseLong(t2)){
-				return Integer.parseInt(node1) - Integer.parseInt(node2) + random.nextInt(20) - 10;
+				return Integer.parseInt(node1) - Integer.parseInt(node2);
 			}else{
 				return Long.parseLong(t1) > Long.parseLong(t2)? -1 : 1 ;
 			}
 		}
 	}
 
-	public static void enableServerMutex(){
-		int port = 0;
-		try{
-			for(int i=0; i<nodeNames.size(); i++){
-				if(Integer.valueOf(idMutex) == Integer.valueOf(nodeNames.get(i))){
-					port = Integer.parseInt(portNums.get(i));
-				}else{
-					continue;
-				}
-			}
-			mutexServerSocket = new ServerSocket(port);
-			System.out.println("Node " + idMutex + " listening on port " + port+" in mutex");
-		}catch (IOException e){
-			System.out.println("Could not listen on port in mutex: " + port);
-			System.exit(-1);
-		}
-	}
-
-	class listenThread implements Runnable{
-		//constructor
-		listenThread(){}
-		public void run(){
-			listenSocket();
-		}
-	}
-
-	public void listenSocket(){
-		boolean scanning = true;
-		while(scanning){
-			ClientWorker w;
-			try{
-				w = new ClientWorker(mutexServerSocket.accept());
-				Thread t = new Thread(w);
-				t.start();
-			}catch(IOException e){
-				System.out.println("Accept failed in listenSocket() in MutexWorker class, node "+idMutex+" terminated");
-				try {
-					mutexServerSocket.close();
-					Thread.currentThread().interrupt();
-					}catch(IOException ex){
-						System.out.println("This node has already terminated, nodeID: " + idMutex);
-					}
-				System.exit(-1);
-			}
-		}
-	}
-
-	class ClientWorker implements Runnable{
-		private Socket client;
-		private volatile boolean scanning = true;
-
-		//Constructor
-		ClientWorker(Socket client) {
-			this.client = client;
-		}
-		
-		public void run(){
-			String line;
-			BufferedReader in = null;
-			PrintWriter out = null;
-			//boolean scanning = true;
-			int intNodeID = Integer.parseInt(idMutex);
-			try{
-				in = new BufferedReader(new InputStreamReader(client.getInputStream()));
-				out = new PrintWriter(client.getOutputStream(), true);
-			}catch (IOException e) {
-				System.out.println("in or out failed in run()");
-				System.exit(-1);
-			}
-			while(scanning){//receive events need to handle semaphore too
-				try{
-					line = in.readLine();
-					if(line != null){
-						System.out.println("Node "+idMutex+" message received in mutex service listen socket: " + line);
-						if(line.contains("REQUEST")){
-							String s = line.substring(line.indexOf(" ")+1);
-							System.out.println("REQUEST node and timeStamp :" + s);
-
-							lockQueue.lock();
-							try{
-								pQueue.add(s);
-								sendReply(s);
-							}finally{
-								lockQueue.unlock();
-							}
-							
-						}else if(line.contains("REPLY")){
-							//TODO: 1. extract the tag,
-							//2. check if the tag has been received num%numNodes == 0 times
-							String tag = line.substring(line.indexOf(" ")+1);
-							System.out.println("REPLY node and timeStamp :" + tag);
-
-							lockMap.lock();
-							try{
-								if(mapReply.containsKey(tag)){
-									mapReply.put(tag, mapReply.get(tag)+1);
-								}else{
-									mapReply.put(tag, 1);
-								}
-							}finally{
-								lockMap.unlock();
-							}
-
-
-						}else if(line.contains("RELEASE")){
-							//TODO : remove pQueue's head, if the head contains the tag
-							//question : what if the head does not contain the tag?
-							String remove = pQueue.poll();
-							System.out.println("Node " + idMutex + " remove PriorityQueue entry "+ remove);
-						}
-					}
-				}catch(IOException e){
-					System.out.println("Read failed from ClientWorker-->run()-->try{}");
-					scanning = false;
-					//System.exit(-1);
-				}
-			}	
-		}
-	}
 
 	public void sendReply(String s){
 		int target = Integer.parseInt(s.substring(0, s.indexOf(" ")));
@@ -645,8 +737,14 @@ class MutexWorker implements MutexInterface{
 		broadcast(msgSend);
 		while(true){
 			if(mapReply.containsKey(tag)){
+				System.out.println("Mark in csEnter(tag) 1, numNodes: "+ numNodes + " mapReply.get(tag): " + mapReply.get(tag));
 				if(mapReply.get(tag) >= numNodes){
-					if(tag.contains(pQueue.peek())) return;
+					System.out.println("Mark in csEnter(tag) 2");
+					//System.out.println("pQueue.peek():" + pQueue.peek());
+					if(tag.contains(pQueue.peek())){
+						System.out.println("Returning from csEnter()");
+						return;
+					}
 				}
 			}
 			sleep(100);
@@ -702,7 +800,7 @@ class MutexWorker implements MutexInterface{
 					String[] parts2 = currentLine.split("\\s+");
 					nodeNames.add(parts2[0]);
 					hostNames.add(parts2[1]);
-					portNums.add(Integer.toString(Integer.parseInt(parts2[2])+1));
+					portNums.add(parts2[2]);
 					System.out.println("Mutex Section 2: ");
 					System.out.println("Node: " + parts2[0] + " host: " + parts2[1] + " port: " + parts2[2]);
 					//System.out.println("lineCount: " + lineCount);
@@ -745,7 +843,7 @@ class MutexWorker implements MutexInterface{
 					System.out.println("Connection failed, need to fix some bugs, giving up reconnecting");
 					scanning = false;
 				}
-				System.out.println("Connection failed, reconnecting in 0.5 seconds");
+				System.out.println("Connection failed in mutex, reconnecting in 0.5 seconds");
 				//ex.printStackTrace();
 				times++;
 				sleep(500);
