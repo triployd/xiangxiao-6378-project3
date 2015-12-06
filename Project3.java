@@ -44,12 +44,12 @@ public class Project3{
 		sleep(5000);
 
 		TobWorker tob = new TobWorker(nodeID, configFile, serverSock);
-		
+
 		Thread send = new Thread(new SendThread(tob));
 		send.start();
 		Thread receive = new Thread(new ReceiveThread(tob));
 		receive.start();
-		
+
 		System.out.println("end of main()");
 	}
 
@@ -111,7 +111,7 @@ public class Project3{
 				if(currentLine.trim().length() == 0) continue;
 				if(currentLine.trim().charAt(0) == '#') continue;
 				if(currentLine.trim().charAt(0) != '#' && currentLine.trim().contains("#")){
-					currentLine = currentLine.substring(0, currentLine.indexOf('#')); 
+					currentLine = currentLine.substring(0, currentLine.indexOf('#'));
 				}
 				lineCount++;
 				currentLine = currentLine.trim().replaceAll("\\s+", " ");
@@ -275,7 +275,7 @@ class TobWorker implements TobInterface{
 		ClientWorker(Socket client) {
 			this.client = client;
 		}
-		
+
 		public void run(){
 			String line;
 			BufferedReader in = null;
@@ -305,7 +305,7 @@ class TobWorker implements TobInterface{
 					scanning = false;
 					//System.exit(-1);
 				}
-			}	
+			}
 		}
 	}
 
@@ -318,7 +318,7 @@ class TobWorker implements TobInterface{
 				if(currentLine.trim().length() == 0) continue;
 				if(currentLine.trim().charAt(0) == '#') continue;
 				if(currentLine.trim().charAt(0) != '#' && currentLine.trim().contains("#")){
-					currentLine = currentLine.substring(0, currentLine.indexOf('#')); 
+					currentLine = currentLine.substring(0, currentLine.indexOf('#'));
 				}
 				lineCount++;
 				currentLine = currentLine.trim().replaceAll("\\s+", " ");
@@ -361,7 +361,7 @@ class TobWorker implements TobInterface{
 	public void tobSend(String message){
 		//just put the message into sendQueue is ok...
 		sendQueue.add(message);
-	
+
 	}
 
 	class SendThreadTob implements Runnable{
@@ -468,7 +468,7 @@ class MutexWorker implements MutexInterface{
 		connectAllNodes();
 		Thread listen = new Thread(new listenThread());
 		listen.start();
-		
+
 	}
 
 	class TimeStampComparator implements Comparator<String>{
@@ -480,9 +480,10 @@ class MutexWorker implements MutexInterface{
 			String t1 = x.substring(x.indexOf(" ")+1);
 			String t2 = y.substring(y.indexOf(" ")+1);
 			if(Long.parseLong(t1) == Long.parseLong(t2)){
-				return Integer.parseInt(node1) - Integer.parseInt(node2) + random.nextInt(20) - 10;
+				return Integer.parseInt(node1) - Integer.parseInt(node2);
 			}else{
-				return Long.parseLong(t1) > Long.parseLong(t2)? -1 : 1 ;
+				//return Long.parseLong(t1) > Long.parseLong(t2)? -1 : 1 ;
+				return random.nextInt(20) - 10;
 			}
 		}
 	}
@@ -542,7 +543,7 @@ class MutexWorker implements MutexInterface{
 		ClientWorker(Socket client) {
 			this.client = client;
 		}
-		
+
 		public void run(){
 			String line;
 			BufferedReader in = null;
@@ -572,7 +573,7 @@ class MutexWorker implements MutexInterface{
 							}finally{
 								lockQueue.unlock();
 							}
-							
+
 						}else if(line.contains("REPLY")){
 							//TODO: 1. extract the tag,
 							//2. check if the tag has been received num%numNodes == 0 times
@@ -603,7 +604,7 @@ class MutexWorker implements MutexInterface{
 					scanning = false;
 					//System.exit(-1);
 				}
-			}	
+			}
 		}
 	}
 
@@ -640,7 +641,7 @@ class MutexWorker implements MutexInterface{
 		//returns when it has the permission to enter cs
 		//TODO: 1. send request to other nodes
 		//TODO: 2. while(true) return
-		
+
 		String msgSend = "REQUEST " + tag;
 		broadcast(msgSend);
 		while(true){
@@ -676,7 +677,7 @@ class MutexWorker implements MutexInterface{
 				if(currentLine.trim().length() == 0) continue;
 				if(currentLine.trim().charAt(0) == '#') continue;
 				if(currentLine.trim().charAt(0) != '#' && currentLine.trim().contains("#")){
-					currentLine = currentLine.substring(0, currentLine.indexOf('#')); 
+					currentLine = currentLine.substring(0, currentLine.indexOf('#'));
 				}
 				lineCount++;
 				currentLine = currentLine.trim().replaceAll("\\s+", " ");

@@ -5,11 +5,12 @@ import java.nio.*;
 import java.lang.*;
 import java.util.concurrent.Semaphore;
 
+
 public class Project2{
 	//field of the Project2
 	public static String config_file;
 	public static int numberNodes; //record the number of nodes in the system
-	
+
 	public static String net_id_config;
 	public static String nodeID;
 	public static int minPerActive;
@@ -74,7 +75,7 @@ public class Project2{
 		isActive = decideActive(); //50% chance to be active
 		sem.release();
 		numMessagesToSend = getNumberOfMsgToSend();
-		
+
 		enableServer();
 		sleep(5000);
 
@@ -135,6 +136,7 @@ public class Project2{
 		}
 	}
 
+
 	void startSendThread(){
 		Thread t_Send = new Thread(new SenderWorker());
 		t_Send.start();
@@ -150,7 +152,7 @@ public class Project2{
 				if(currentLine.trim().length() == 0) continue;
 				if(currentLine.trim().charAt(0) == '#') continue;
 				if(currentLine.trim().charAt(0) != '#' && currentLine.trim().contains("#")){
-					currentLine = currentLine.substring(0, currentLine.indexOf('#')); 
+					currentLine = currentLine.substring(0, currentLine.indexOf('#'));
 				}
 				lineCount++;
 				currentLine = currentLine.trim().replaceAll("\\s+", " ");
@@ -177,7 +179,7 @@ public class Project2{
 				}
 				//Section 2: listen ports
 				//currentLine.contains("dc") can do the trick too
-				//lineCount > 1 && lineCount <= numberNodes + 1 && 
+				//lineCount > 1 && lineCount <= numberNodes + 1 &&
 				if(lineCount > 1 && lineCount <= numberNodes + 1 && currentLine.contains("dc")){
 					String[] parts2 = currentLine.split("\\s+");
 					nodeNames.add(parts2[0]);
@@ -197,7 +199,7 @@ public class Project2{
 					System.out.println("neighbors: " + currentLine);
 					//lineCount++;
 					continue;
-				} 
+				}
 				System.out.println("Bad config file with excessive paths or other incorrect information");
 			}
 		}catch(IOException e){
@@ -368,7 +370,7 @@ public class Project2{
 					}
 
 					sendAppMessage();
-					
+
 					lastTimeSent = currentTime;
 					totalAppSent++;
 					numSentThisTime++;
@@ -396,7 +398,7 @@ public class Project2{
 		int intID = Integer.parseInt(nodeID);
 
 		vectorClock[intID]++; //need to use a lock to lock it somewhere
-		
+
 		String message = "APPMSG, Sent_time(Sys): " + System.currentTimeMillis() + " " + nodeID + "-" + target + " " + Arrays.toString(vectorClock);
 		//System.out.println("Message to be sent: " + message);
 		try{
@@ -437,7 +439,7 @@ public class Project2{
 		ClientWorker(Socket client) {
 			this.client = client;
 		}
-		
+
 		public void run(){
 			String line;
 			BufferedReader in = null;
@@ -451,9 +453,9 @@ public class Project2{
 				System.out.println("in or out failed in run()");
 				System.exit(-1);
 			}
-			
+
 			while(scanning){//receive events need to handle semaphore too
-				
+
 				try{
 					line = in.readLine();
 					if(line != null){
@@ -484,7 +486,7 @@ public class Project2{
 							}catch(InterruptedException ie){
 								System.out.println("semControlMsg.acquire failed in listenSocket.run() ");
 							}
-							if(!isBlue){	
+							if(!isBlue){
 								channelCount++;
 							}
 							semControlMsg.release();
@@ -575,7 +577,7 @@ public class Project2{
 					scanning = false;
 					//System.exit(-1);
 				}
-			}	
+			}
 		}
 	}
 
